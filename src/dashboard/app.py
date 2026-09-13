@@ -106,7 +106,7 @@ def load_routes_data():
     return routes_df
 
 def get_stats():
-    stats = {"raw": 0, "cleaned": 0, "index": 0, "routes": 0, "mospi": 0}
+    stats = {"raw": 0, "cleaned": 0, "index": 0, "routes": 0}
     try:
         engine = get_sqlalchemy_engine()
         for key, table in [
@@ -114,7 +114,6 @@ def get_stats():
             ("cleaned", "cleaned_fares"),
             ("index", "price_index"),
             ("routes", "routes"),
-            ("mospi", "mospi_cpi_index"),
         ]:
             try:
                 df_cnt = pd.read_sql_query(f"SELECT COUNT(*) AS cnt FROM {table}", engine)
@@ -1580,7 +1579,7 @@ else:
             
             table_choice = st.selectbox(
                 "Select Table to View Full Data:",
-                ["Cleaned Airfares (cleaned_fares)", "Daily Price Index (price_index)", "MoSPI Official CPI (mospi_cpi_index)", "Raw Scraped Quotes (raw_quotes)", "Configured Routes (routes)"],
+                ["Cleaned Airfares (cleaned_fares)", "Daily Price Index (price_index)", "Raw Scraped Quotes (raw_quotes)", "Configured Routes (routes)"],
                 key="admin_tab2_table_select"
             )
             
@@ -1588,7 +1587,6 @@ else:
                 "Cleaned Airfares (cleaned_fares)": "cleaned_fares",
                 "Daily Price Index (price_index)": "price_index",
                 "Raw Scraped Quotes (raw_quotes)": "raw_quotes",
-                "MoSPI Official CPI (mospi_cpi_index)": "mospi_cpi_index",
                 "Configured Routes (routes)": "routes"
             }
             selected_table = table_map[table_choice]
@@ -1624,12 +1622,11 @@ else:
             st.header("System Statistics")
             st.markdown("Review row counts and structure of the central airfare database.")
             
-            col1, col2, col3, col4, col5 = st.columns(5)
+            col1, col2, col3, col4 = st.columns(4)
             col1.metric("Raw Scraped Quotes", f"{stats['raw']:,}")
             col2.metric("Cleaned Fares", f"{stats['cleaned']:,}")
             col3.metric("Daily Index Entries", f"{stats['index']:,}")
             col4.metric("Configured Routes", f"{stats['routes']:,}")
-            col5.metric("MoSPI Official Records", f"{stats.get('mospi', 0):,}")
             
             st.markdown("### 📊 Export Clean Data for Microsoft Excel")
             st.markdown("Download database tables directly as clean CSV spreadsheets that open formatted in Microsoft Excel:")
