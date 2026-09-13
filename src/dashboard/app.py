@@ -46,7 +46,6 @@ from src.scraper.ota_scraper import OTAScraper
 from src.api.ignav_client import search_ignav
 from src.collection.itinerary_extractor import extract_itineraries
 from src.config.database import get_sqlalchemy_engine, get_connection
-from src.collection.mospi_collector import run_mospi_sync
 
 # Set page config
 st.set_page_config(page_title="Real-time Airfare Price Index (APIx)", layout="wide")
@@ -98,16 +97,6 @@ def load_index_data():
     return index_df
 
 @st.cache_data(ttl=5)
-
-@st.cache_data(ttl=5)
-def load_mospi_data():
-    try:
-        engine = get_sqlalchemy_engine()
-        mospi_df = pd.read_sql_query("SELECT * FROM mospi_cpi_index ORDER BY index_date ASC", engine)
-        mospi_df.columns = mospi_df.columns.str.lower()
-        return mospi_df
-    except Exception:
-        return pd.DataFrame()
 
 @st.cache_data(ttl=5)
 def load_routes_data():
@@ -1463,9 +1452,8 @@ else:
         stats = get_stats()
         
         # Tabs for Admin tasks
-        admin_tab1, admin_tab_mospi, admin_tab2, admin_tab3 = st.tabs([
+        admin_tab1, admin_tab2, admin_tab3 = st.tabs([
             "📊 Cost vs Route Analysis", 
-            "🏛️ MoSPI eSankhyiki Official Data & Sync",
             "🛣️ DGCA Routes & Weights Configuration",
             "📊 System Statistics & DB Manager"
         ])
@@ -1538,95 +1526,6 @@ else:
                         use_container_width=True
                     )
                             
-
-        with admin_tab_mospi:
-            st.header("🏛️ MoSPI Official Government Datasets (eSankhyiki)")
-            st.markdown("Real official data retrieved directly from the **Ministry of Statistics and Programme Implementation (MoSPI)** [eSankhyiki Portal](https://esankhyiki.mospi.gov.in).")
-            
-            col_m1, col_m2 = st.columns([3, 1])
-            with col_m1:
-                st.info("💡 Official baseline datasets are stored in Supabase PostgreSQL (`mospi_cpi_index`) and can be refreshed live from government APIs.")
-            with col_m2:
-                if st.button("🔄 Sync Live MoSPI Data", type="primary", use_container_width=True, key="admin_sync_mospi_btn"):
-                    with st.spinner("Fetching latest CPI series from esankhyiki.mospi.gov.in..."):
-                        count = run_mospi_sync()
-                        st.success(f"Successfully synced {count} official records into Supabase PostgreSQL!")
-                        st.cache_data.clear()
-                        st.rerun()
-
-            mospi_df = load_mospi_data()
-            
-            if mospi_df.empty:
-                st.warning("No MoSPI official data found in the database. Click 'Sync Live MoSPI Data' above to ingest official records.")
-            else:
-                m_subtab1, m_subtab2, m_subtab3 = st.tabs([
-                    "📈 Airfare & Transport Index Trends",
-                    "🗺️ State-wise Transport Breakdown",
-                    "📋 Official Dataset Explorer"
-                ])
-                
-                with m_subtab1:
-                    st.subheader("Official Airfare CPI vs Transport & Inflation")
-                    st.markdown("Official **Air Fare CPI (Item 6.1.03.3.2.07.0)**, **Transport & Communication CPI (Subgroup 6.1.03)**, and **General Headline CPI** from MoSPI (Base 2012=100).")
-                    
-                    nat_df = mospi_df[mospi_df['state'].str.lower() == 'all india']
-                    if not nat_df.empty:
-                        chart_pivot = nat_df.pivot_table(index='index_date', columns='item_name', values='index_value', aggfunc='mean')
-                        st.line_chart(chart_pivot)
-                        
-                        st.markdown("### 📊 Key Official MoSPI Metrics (Latest Release)")
-                        m_cols = st.columns(4)
-                        latest_date = nat_df['index_date'].max()
-                        latest_records = nat_df[nat_df['index_date'] == latest_date]
-                        
-                        airfare_row = latest_records[latest_records['category'] == 'Air Fare']
-                        trans_row = latest_records[latest_records['item_name'].str.contains('Combined', case=False, na=False)]
-                        gen_row = latest_records[latest_records['category'] == 'General CPI']
-                        
-                        if not airfare_row.empty:
-                            m_cols[0].metric("Official Air Fare CPI", f"{airfare_row.iloc[0]['index_value']:.1f}", f"{airfare_row.iloc[0]['inflation']:.2f}% YoY")
-                        if not trans_row.empty:
-                            m_cols[1].metric("Transport & Comm. (Combined)", f"{trans_row.iloc[0]['index_value']:.1f}", f"{trans_row.iloc[0]['inflation']:.2f}% YoY")
-                        if not gen_row.empty:
-                            m_cols[2].metric("General CPI Inflation", f"{gen_row.iloc[0]['index_value']:.1f}", f"{gen_row.iloc[0]['inflation']:.2f}% YoY")
-                        m_cols[3].metric("Data Source", "MoSPI eSankhyiki", latest_date)
-
-                with m_subtab2:
-                    st.subheader("State-level Transport & Communication Price Index")
-                    st.markdown("Official MoSPI transport price indices across major Indian states and aviation hubs.")
-                    
-                    state_df = mospi_df[mospi_df['category'] == 'State Transport']
-                    if not state_df.empty:
-                        state_pivot = state_df.pivot_table(index='index_date', columns='state', values='index_value', aggfunc='mean')
-                        st.line_chart(state_pivot)
-                        
-                        st.markdown("#### Latest State Transport Comparison")
-                        latest_state = state_df[state_df['index_date'] == state_df['index_date'].max()][['state', 'index_value', 'inflation', 'status']]
-                        latest_state.columns = ['State / UT', 'Transport Index (Base 2012=100)', 'Inflation (YoY %)', 'Data Status']
-                        st.dataframe(latest_state.sort_values(by='Transport Index (Base 2012=100)', ascending=False), use_container_width=True)
-
-                with m_subtab3:
-                    st.subheader("Official MoSPI eSankhyiki Dataset Explorer")
-                    st.markdown("Explore, filter, and export the official government CPI time series stored in your Supabase PostgreSQL database.")
-                    
-                    cat_filter = st.multiselect("Filter by Category", mospi_df['category'].unique(), default=mospi_df['category'].unique(), key="admin_mospi_cat_filter")
-                    filtered_mospi = mospi_df[mospi_df['category'].isin(cat_filter)]
-                    
-                    csv_mospi = filtered_mospi.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="📥 Download MoSPI Official Dataset (CSV)",
-                        data=csv_mospi,
-                        file_name="mospi_official_cpi_data.csv",
-                        mime="text/csv",
-                        key="admin_dl_mospi_csv"
-                    )
-                    
-                    st.dataframe(
-                        filtered_mospi,
-                        column_config=get_table_column_config(filtered_mospi),
-                        use_container_width=True,
-                        height=450
-                    )
 
         with admin_tab2:
             st.header("DGCA Route Weight Management")

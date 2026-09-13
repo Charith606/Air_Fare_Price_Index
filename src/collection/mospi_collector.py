@@ -224,11 +224,11 @@ class MoSPICollector:
                     status VARCHAR(20),
                     source VARCHAR(255),
                     collected_at VARCHAR(50)
-                );
-                CREATE INDEX IF NOT EXISTS idx_mospi_cpi_date ON mospi_cpi_index(index_date);
-                CREATE INDEX IF NOT EXISTS idx_mospi_cpi_cat ON mospi_cpi_index(category);
+                )
             """))
-            conn.execute(text("TRUNCATE TABLE mospi_cpi_index RESTART IDENTITY;"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_mospi_cpi_date ON mospi_cpi_index(index_date)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_mospi_cpi_cat ON mospi_cpi_index(category)"))
+            conn.execute(text("TRUNCATE TABLE mospi_cpi_index RESTART IDENTITY"))
 
         # 2. Insert records
         df.to_sql("mospi_cpi_index", engine, if_exists="append", index=False, chunksize=1000)
