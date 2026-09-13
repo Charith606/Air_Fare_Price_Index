@@ -106,24 +106,24 @@ def load_routes_data():
     return routes_df
 
 def get_stats():
+    stats = {"raw": 0, "cleaned": 0, "index": 0, "routes": 0, "mospi": 0}
     try:
         engine = get_sqlalchemy_engine()
-        with engine.connect() as conn:
-            from sqlalchemy import text
-            raw_count = conn.execute(text("SELECT COUNT(*) FROM raw_quotes")).scalar() or 0
-            cleaned_count = conn.execute(text("SELECT COUNT(*) FROM cleaned_fares")).scalar() or 0
-            index_count = conn.execute(text("SELECT COUNT(*) FROM price_index")).scalar() or 0
-            routes_count = conn.execute(text("SELECT COUNT(*) FROM routes")).scalar() or 0
-            mospi_count = conn.execute(text("SELECT COUNT(*) FROM mospi_cpi_index")).scalar() or 0
+        for key, table in [
+            ("raw", "raw_quotes"),
+            ("cleaned", "cleaned_fares"),
+            ("index", "price_index"),
+            ("routes", "routes"),
+            ("mospi", "mospi_cpi_index"),
+        ]:
+            try:
+                df_cnt = pd.read_sql_query(f"SELECT COUNT(*) AS cnt FROM {table}", engine)
+                stats[key] = int(df_cnt.iloc[0, 0])
+            except Exception:
+                stats[key] = 0
     except Exception:
-        raw_count, cleaned_count, index_count, routes_count, mospi_count = 0, 0, 0, 0, 0
-    return {
-        "raw": raw_count,
-        "cleaned": cleaned_count,
-        "index": index_count,
-        "routes": routes_count,
-        "mospi": mospi_count
-    }
+        pass
+    return stats
 
 
 # ----------------- TABLE COLUMN CONFIGURATION HELPER -----------------
@@ -1625,11 +1625,11 @@ else:
             st.markdown("Review row counts and structure of the central airfare database.")
             
             col1, col2, col3, col4, col5 = st.columns(5)
-            col1.metric("Raw Scraped Quotes", stats["raw"])
-            col2.metric("Cleaned Fares", stats["cleaned"])
-            col3.metric("Daily Index Entries", stats["index"])
-            col4.metric("Configured Routes", stats["routes"])
-            col5.metric("MoSPI Official Records", stats.get("mospi", 0))
+            col1.metric("Raw Scraped Quotes", f"{stats['raw']:,}")
+            col2.metric("Cleaned Fares", f"{stats['cleaned']:,}")
+            col3.metric("Daily Index Entries", f"{stats['index']:,}")
+            col4.metric("Configured Routes", f"{stats['routes']:,}")
+            col5.metric("MoSPI Official Records", f"{stats.get('mospi', 0):,}")
             
             st.markdown("### 📊 Export Clean Data for Microsoft Excel")
             st.markdown("Download database tables directly as clean CSV spreadsheets that open formatted in Microsoft Excel:")
